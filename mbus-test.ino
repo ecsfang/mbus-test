@@ -9,7 +9,6 @@
 HardwareSerial* hanPort;
 
 
-
 static const int LED_PIN = LED_BUILTIN ;
 
 #define DLMS_READER_BUFFER_SIZE 1024
@@ -25,21 +24,24 @@ Energy_t meter;
 
 void blink(int count) {
   for (int i = 0; i < count; i++) {
-    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_PIN, LOW);  // Turn on
     delay(50);
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, HIGH); // Turn off
     delay(50);
   }
 }
 
 
 void setup() {
-  
+  // Setup com port against the M-Bus card
   hanPort = &Serial;
   hanPort->begin(2400, SERIAL_8N1);
   hanPort->swap();
+
+  // Setup debug-port (when using USB connected)
   Serial1.begin(115200);
 
+  // Enable the internal LED
   pinMode(LED_PIN, OUTPUT);
 
   setup_wifi();
@@ -136,14 +138,17 @@ void loop() {
   delay(100);
 }
 
+byte gHanHeader[] = { 0xE6, 0xE7, 0x00, 0x0F };
+#define START_OF_FRAME    0x7E
+#define START_OF_KAMSTRUP 0x0C
+
 /*
   Data should start with E6 E7 00 0F
   and continue with four bytes for the InvokeId
 */
 bool isValidHeader(byte *data)
 {
-  byte validHeader[] = { 0xE6, 0xE7, 0x00, 0x0F };
-  return memcmp(data, validHeader, 4) == 0;  
+  return memcmp(data, gHanHeader, 4) == 0;  
 }
 
 bool CheckMessage(byte *buffer, int pos)
@@ -156,7 +161,8 @@ bool CheckMessage(byte *buffer, int pos)
   
   if( !isValidHeader(userData) )
   {
-    Debug.printf("Invalid HAN data: Start should be E6 E7 00 0F\n");
+    Debug.printf("Invalid HAN data: Start should be %02X %02X %02X %02X\n",
+      gHanHeader[0], gHanHeader[1], gHanHeader[2], gHanHeader[3]);
     return false;
   }
 
@@ -169,7 +175,7 @@ bool CheckMessage(byte *buffer, int pos)
 
   // If the byte is 0x0C then we can assume that it is Kaifa or Kamstrup
   byte firstByte = userData[firstStructurePos];
-  if (firstByte == 0x0C) {
+  if (firstByte == START_OF_KAMSTRUP) {
     // I only support Kamstrup ...
     ret = decodeKaifaKamstrupMeter(&userData[firstStructurePos]);
   }
@@ -203,7 +209,6 @@ bool checkChecksum(int pos)
   return checksum == calculatedChecksum;
 }
 
-#define START_OF_FRAME  0x7E
 
 // Receive byte by byte and build the complete buffer
 // Return true when a complete buffer is received
