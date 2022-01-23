@@ -119,6 +119,11 @@ bool isMidnight()
   return ret;
 }
 
+void clearMeter(void)
+{
+  memset(&meter, 0, sizeof(Energy_t));
+}
+
 bool decodeKaifaKamstrupMeter(byte *data) {
   // First we get an untyped date time.
   int len = data[0];
@@ -246,6 +251,9 @@ int decodeData(byte *data)
       lastObis = 0;
       len = 1;
       break;
+    default:
+      sprintf(buf,"<Uknwn: 0x%02X>", data[0]);
+      Debug.printf("%s", buf);
   }
   return len + 2;
 }

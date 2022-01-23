@@ -21,6 +21,7 @@ typedef struct {
   unsigned int dayPower;
 } Energy_t;
 
+void clearMeter(void);
 bool decodeKaifaKamstrupMeter(byte *data);
 int getO16int(byte *data);
 int getO32int(byte *data);

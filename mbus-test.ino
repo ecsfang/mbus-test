@@ -8,6 +8,8 @@
 
 HardwareSerial* hanPort;
 
+// On Wemos, connect: D1, D2, D4, GND and 3.3V
+
 
 static const int LED_PIN = LED_BUILTIN ;
 
@@ -36,19 +38,31 @@ void setup() {
   // Setup com port against the M-Bus card
   hanPort = &Serial;
   hanPort->begin(2400, SERIAL_8N1);
+  // Swap pins to use TX on GPIO15 and RX on GPIO13
   hanPort->swap();
 
   // Setup debug-port (when using USB connected)
   Serial1.begin(115200);
 
+  clearMeter();
+
   // Enable the internal LED
   pinMode(LED_PIN, OUTPUT);
+
+  //Serial1.println("Set up WiFi ...");
 
   setup_wifi();
   client.setServer(mqtt_server, 1883);
 
   // Initialize the server (telnet or web socket) of RemoteDebug
   Debug.begin("hanReader");
+
+  blink(10);
+
+  Debug.handle();
+  delay(5000);
+
+  Debug.println("########################");
   Debug.printf("Hello from Han-Reader!\n");
 
   Debug.printf("WiFi connected\nIP address: ");
@@ -75,7 +89,7 @@ void setup() {
     Debug.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
+    Debug.printf("Error[%u]: ", error);
     if (error == OTA_AUTH_ERROR) {
       Debug.println("Auth Failed");
     } else if (error == OTA_BEGIN_ERROR) {
@@ -101,7 +115,8 @@ void setup_wifi() {
   WiFi.begin(wifi_ssid, wifi_password);
 
   while (WiFi.status() != WL_CONNECTED) {
-    blink(5);
+    blink(1);
+    delay(500);
     Serial1.print(".");
   }
 }
@@ -117,17 +132,45 @@ void reconnect() {
       Debug.printf("connected\n");
     } else {
       Debug.printf("failed, rc=%d\n", client.state());
-      Debug.printf(" try again in 5 seconds\n");
-      // Wait 5 seconds before retrying
-      delay(5000);
+      Debug.printf(" restart again in 3 seconds\n");
+      // Wait 3 seconds before restarting
+      delay(3000);
+      // Restart the board ...
+      ESP.restart();
     }
   }
 }
 
+unsigned long TT, upM=0, upH=0, upD=0;
+unsigned int nData = 0;
+
 // the loop function runs over and over again forever
 void loop() {
+  if( (millis()-TT) > 60000 ) {
+    upM++;
+    if( upM == 60 ) {
+      upM = 0;
+      upH++;
+    }
+    if( upH == 24 ) {
+      upH = 0;
+      upD++;
+    }
+    TT = millis();
+    if( Debug.isActive(Debug.VERBOSE) ) {
+      // Some debug-messages every minute ...
+      Debug.printf("[%d:%02d.%02d] ", upD, upH, upM);
+      Debug.printf("%d messaged received | ", nData);
+      Debug.printf(" rssi:%d\n", WiFi.RSSI());
+    }
+  }
+
   while (hanPort->available() > 0) {
     if( ReadData(hanPort->read()) ) {
+      nData++;
+      if( Debug.isActive(Debug.DEBUG) ) {
+        Debug.printf("Got data! (%d msgs)\n", nData);
+      }
       CheckMessage(buffer, position);
       blink(2);
     }
