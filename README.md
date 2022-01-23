@@ -7,9 +7,9 @@ This is a minimalistic approach since I failed to use the code above. The serial
 ## Software
 Needs the following libraries:
 
-  https://github.com/JoaoLopesF/RemoteDebug
-  PubSubClient
-  ArduinoOTA
+- [X] https://github.com/JoaoLopesF/RemoteDebug
+- [X] PubSubClient
+- [X] ArduinoOTA
 
 RemoteDebug makes it possible to debug the unit remotely. Using e.g. telnet one can get debug output and even send commands to the unit.
 
