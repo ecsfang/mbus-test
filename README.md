@@ -4,6 +4,8 @@ Also updated by [@gskjold](https://github.com/gskjold/AmsToMqttBridge)
 
 This is a minimalistic approach since I failed to use the code above. The serial port only received about 20% of the received characters, but I have not spent time debugging to find out why.
 
+More info about the HAN-port can be found here: [HAN-porten](https://hanporten.se/)
+
 ## Software
 Needs the following libraries:
 
