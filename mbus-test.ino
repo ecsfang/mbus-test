@@ -37,19 +37,18 @@ void blink(int count) {
 void setup() {
   // Setup com port against the M-Bus card
   hanPort = &Serial;
-  hanPort->begin(2400, SERIAL_8N1);
-  // Swap pins to use TX on GPIO15 and RX on GPIO13
-  hanPort->swap();
+  hanPort->setRxBufferSize(1024);
+  hanPort->begin(115200);
 
   // Setup debug-port (when using USB connected)
-  Serial1.begin(115200);
+  //Serial1.begin(115200);
 
   clearMeter();
 
   // Enable the internal LED
   pinMode(LED_PIN, OUTPUT);
 
-  //Serial1.println("Set up WiFi ...");
+  Serial.println("Set up WiFi ...");
 
   setup_wifi();
   client.setServer(mqtt_server, 1883);
@@ -106,6 +105,10 @@ void setup() {
   });
   ArduinoOTA.begin();
 
+  hanPort->begin(2400, SERIAL_8N1);
+  // Swap pins to use TX on GPIO15 and RX on GPIO13
+  hanPort->swap();
+
   blink(10);
 }
 
@@ -117,8 +120,9 @@ void setup_wifi() {
   while (WiFi.status() != WL_CONNECTED) {
     blink(1);
     delay(500);
-    Serial1.print(".");
+    Serial.print(".");
   }
+  Serial.println("Connected!");
 }
 
 void reconnect() {
@@ -165,20 +169,23 @@ void loop() {
     }
   }
 
-  while (hanPort->available() > 0) {
-    if( ReadData(hanPort->read()) ) {
-      nData++;
-      if( Debug.isActive(Debug.DEBUG) ) {
-        Debug.printf("Got data! (%d msgs)\n", nData);
+  if( hanPort->available() > 0) {
+    while (hanPort->available() > 0) {
+      if( ReadData(hanPort->read()) ) {
+        nData++;
+        if( Debug.isActive(Debug.DEBUG) ) {
+          Debug.printf("Got data (%d bytes)! (%d msgs)\n", position, nData);
+        }
+        CheckMessage(buffer, position);
+        blink(2);
       }
-      CheckMessage(buffer, position);
-      blink(2);
     }
+  } else {
+    // Remote debug over WiFi
+    Debug.handle();
+    ArduinoOTA.handle();
+    delay(100);
   }
-  // Remote debug over WiFi
-  Debug.handle();
-  ArduinoOTA.handle();
-  delay(100);
 }
 
 byte gHanHeader[] = { 0xE6, 0xE7, 0x00, 0x0F };
@@ -208,8 +215,9 @@ bool CheckMessage(byte *buffer, int pos)
       gHanHeader[0], gHanHeader[1], gHanHeader[2], gHanHeader[3]);
     return false;
   }
-
-  //dumpHex(userData,userDataLen);
+  if( Debug.isActive(Debug.VERBOSE) ) {
+    dumpHex(userData,pos);
+  }
   
   // So this is where we need to differentiate between Aidon, Kaifa and Kamstrup meters.
   // From what I've gathered Kaifa and Kamstrup shows in an untyped datetime with just
@@ -249,6 +257,8 @@ bool checkChecksum(int pos)
   // Verify the header checksum
   uint16_t checksum = GetChecksum(pos - 2);
   uint16_t calculatedChecksum = Crc16.ComputeChecksum(buffer, 1, pos - 3);
+  if( checksum != calculatedChecksum )
+      Debug.printf("%X != %X\n", checksum, calculatedChecksum);
   return checksum == calculatedChecksum;
 }
 
@@ -306,6 +316,7 @@ bool ReadData(byte data)
   {
     // Capture the length of the data package
     dataLength = getO16int(buffer+1) & 0xFFF; //((buffer[1] & 0x0F) << 8) | buffer[2];
+    Debug.printf("Length: %d\n", dataLength);
     return false;
   }
   else if (destinationAddressLength == 0)
@@ -335,13 +346,14 @@ bool ReadData(byte data)
       Debug.printf("Mismatched header checksum. Reset\n");
       Clear();
     }
+    Debug.printf("Matched header checksum (pos = %d)!\n", position);
     return false;
   }
   else if (position == dataLength + 1)
   {
     // Verify the data package checksum
     if( !checkChecksum(position) ) {
-      Debug.printf("Mismatched frame checksum. Reset\n");
+      Debug.printf("Mismatched frame checksum (pos = %d). Reset\n", position);
       Clear();
     }
     return false;
@@ -350,7 +362,7 @@ bool ReadData(byte data)
   {
     // We're done, check the stop flag and signal we're done
     if (data == START_OF_FRAME) {
-      Debug.println("Done!");
+      Debug.printf("Done! (%d)\n", position);
       return true;
     }
     else
@@ -367,7 +379,7 @@ void dumpHex(byte *buf, int len)
 {
   char bb[2048];
   int p = 0;
-  sprintf(bb, "HexDump");
+  sprintf(bb, "HexDump [%d]", len);
   for(int n=0; n<len; n++) {
       if( (n & 0x01F) == 0 ) {
         Debug.printf("%s\n", bb);
@@ -375,7 +387,7 @@ void dumpHex(byte *buf, int len)
       }
       p += sprintf(bb+p,"%02X ", buf[n]);
   }
-  if( p > 5 )
+  if( p > 3 )
     Debug.printf("%s\n", bb);
 }
 

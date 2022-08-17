@@ -79,6 +79,7 @@ int getO32int(byte *data)
   val += data[1] * 0x10000;
   val += data[2] * 0x100;
   val += data[3] * 0x1;
+  //Debug.printf("%08X %08X\n" , val, *((int *)data));
   return val;  
 }
 
@@ -92,8 +93,8 @@ void getObisTime(byte *data)
   meter.time.tm_hour = data[5];
   meter.time.tm_min = data[6];
   meter.time.tm_sec = data[7];
-  strftime (buffer,80,"%Y-%m-%d - %H:%M:%S : ",&meter.time);
-  Debug.printf("%s" , buffer);
+  strftime (buffer,80,"%Y-%m-%d - %H:%M:%S",&meter.time);
+  Debug.printf("\n%s\n" , buffer);
 }
 
 bool bFirst = true;
@@ -150,6 +151,7 @@ bool decodeKaifaKamstrupMeter(byte *data) {
   p += 2;
 
   for(int s = 0; s < ns; s++) {
+    Debug.printf("Msg[%d:%d] ", s+1, p);
     p += decodeData(&data[p]);
   }
   Debug.printf("\n");
@@ -194,14 +196,14 @@ int decodeData(byte *data)
   
   switch( data[0] ) {
     case 0x0A: // Visable string
-      if( bFirst ) {
-        int n = 0;
+      if( 1 /*bFirst*/ ) {
+        n = sprintf(buf,"VSTRNG: ");
         if( lastObis ) {
           op = &obis[lastObis-1];
-          n = sprintf(buf,"%s: ", op->name);
+          n = sprintf(buf+n,"%s: ", op->name);
         }
         sprintf(buf+n,"%.*s ", len, &data[2]);
-        Debug.printf("%s", buf);
+        Debug.printf("%s\n", buf);
       }
       lastObis = 0;
       break;
@@ -209,45 +211,55 @@ int decodeData(byte *data)
       getObisTime(&data[1]);
       break;
     case 0x09: // Octet string
-      n = lastObis = 0;
-      if( len == 6 ) {
-        while( obis[n].name ) {
-          if( isObis(data+2, obis[n].obis) )
-            lastObis = n+1;
-          n++;
+      {
+        int i=0;
+        lastObis = 0;
+        n = sprintf(buf,"OCTST9: ");
+        if( len == 6 ) {
+          while( obis[i].name ) {
+            if( isObis(data+2, obis[i].obis) )
+              lastObis = i+1;
+            i++;
+          }
+          if( !lastObis ) {
+            // Don't count the hourly message ...
+            if( isObis(data+2, everyHour) )
+              cnt.cnt--;
+            sprintf(buf+n,"(%d)[%d.%d.%d.%d.%d.%d] ", len, data[2], data[3], data[4], data[5], data[6], data[7]);
+          }
+          else
+            sprintf(buf+n,"Got {%d.%d.%d.%d.%d.%d} ", len, data[2], data[3], data[4], data[5], data[6], data[7]);
+        } else {
+          n = sprintf(buf,"len = %d", len);
         }
-        if( !lastObis ) {
-          // Don't count the hourly message ...
-          if( isObis(data+2, everyHour) )
-            cnt.cnt--;      
-          sprintf(buf,"(%d)[%d.%d.%d.%d.%d.%d] ", len, data[2], data[3], data[4], data[5], data[6], data[7]);
-          Debug.printf("%s\n", buf);
-        }
+        Debug.printf("%s\n", buf);
       }
       break;
     case 0x06: // Octet string
+      n = sprintf(buf,"OCTST6: ");
       val = getO32int(&data[1]);
       if( lastObis ) {
         op = &obis[lastObis-1];
         *op->val = val;
-        printObis(buf, lastObis);
+        printObis(buf+n, lastObis);
       } else {
-        sprintf(buf,"Val: %d ", val);
+        sprintf(buf+n,"Val: %d ", val);
       }
-      Debug.printf("%s", buf);
+      Debug.printf("%s\n", buf);
       len = 3;
       lastObis = 0;
       break;
     case 0x12: // 2 bytes
+      n = sprintf(buf,"BYTE:   ");
       val = getO16int(&data[1]);
       if( lastObis ) {
         op = &obis[lastObis-1];
         *op->val = val;
-        printObis(buf, lastObis);
+        printObis(buf+n, lastObis);
       } else {
-        sprintf(buf,"Val: %d ", val);
+        sprintf(buf+n,"Val: %d ", val);
       }
-      Debug.printf("%s", buf);
+      Debug.printf("%s\n", buf);
       lastObis = 0;
       len = 1;
       break;
